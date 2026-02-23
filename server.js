@@ -1,35 +1,75 @@
 const express = require("express");
 const axios = require("axios");
-const bodyParser = require("body-parser");
-const Database = require("better-sqlite3");
+const fs = require("fs");
+const path = require("path");
+const initSqlJs = require("sql.js");
 const uuidv4 = require("uuid").v4;
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static(__dirname));
 
 const PORT = 3000;
+const DB_FILE = path.join(__dirname, "data", "rag.db");
+const EMBEDDING_MODEL = "nomic-embed-text";
+const GENERATION_MODEL = "phi3:mini";
 
-// Create / open SQLite DB file
-const db = new Database("data/rag.db");
+let db;
 
-// Create table if not exists
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS documents (
-    id TEXT PRIMARY KEY,
-    content TEXT,
-    embedding TEXT
-  )
-`).run();
+async function initializeDatabase() {
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
-console.log("✅ SQLite database ready");
+  const SQL = await initSqlJs();
+  if (fs.existsSync(DB_FILE)) {
+    const dbFile = fs.readFileSync(DB_FILE);
+    db = new SQL.Database(dbFile);
+  } else {
+    db = new SQL.Database();
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      content TEXT,
+      embedding TEXT
+    )
+  `);
+
+  persistDatabase();
+  console.log("✅ SQLite database ready");
+}
+
+function persistDatabase() {
+  const data = db.export();
+  fs.writeFileSync(DB_FILE, Buffer.from(data));
+}
+
+function getDocuments() {
+  const result = db.exec("SELECT id, content, embedding FROM documents");
+  if (result.length === 0) {
+    return [];
+  }
+
+  const queryResult = result[0];
+  const idIndex = queryResult.columns.indexOf("id");
+  const contentIndex = queryResult.columns.indexOf("content");
+  const embeddingIndex = queryResult.columns.indexOf("embedding");
+
+  return queryResult.values.map((row) => ({
+    id: row[idIndex],
+    content: row[contentIndex],
+    embedding: row[embeddingIndex],
+  }));
+}
+
+const dbReady = initializeDatabase();
 
 // Generate embedding using Ollama
 async function generateEmbedding(text) {
   const response = await axios.post(
     "http://localhost:11434/api/embeddings",
     {
-      model: "nomic-embed-text",
+      model: EMBEDDING_MODEL,
       prompt: text,
     }
   );
@@ -48,6 +88,7 @@ function cosineSimilarity(a, b) {
 // Ingest endpoint
 app.post("/ingest", async (req, res) => {
   try {
+    await dbReady;
     const { text } = req.body;
 
     if (!text) {
@@ -57,10 +98,15 @@ app.post("/ingest", async (req, res) => {
     const id = uuidv4(); // Generate UUID
     const embedding = await generateEmbedding(text);
 
-    db.prepare(`
+    db.run(
+      `
       INSERT OR REPLACE INTO documents (id, content, embedding)
       VALUES (?, ?, ?)
-    `).run(id, text, JSON.stringify(embedding));
+    `,
+      [id, text, JSON.stringify(embedding)]
+    );
+
+    persistDatabase();
 
     res.json({ message: "Document ingested successfully" });
   } catch (err) {
@@ -72,6 +118,7 @@ app.post("/ingest", async (req, res) => {
 // Ask endpoint
 app.post("/ask", async (req, res) => {
   try {
+    await dbReady;
     const { question } = req.body;
 
     if (!question) {
@@ -80,7 +127,7 @@ app.post("/ask", async (req, res) => {
 
     const queryEmbedding = await generateEmbedding(question);
 
-    const rows = db.prepare("SELECT * FROM documents").all();
+    const rows = getDocuments();
 
     const scored = rows.map((row) => {
       const docEmbedding = JSON.parse(row.embedding);
@@ -108,7 +155,7 @@ Answer:
     const response = await axios.post(
       "http://localhost:11434/api/generate",
       {
-        model: "tinyllama",
+        model: GENERATION_MODEL,
         prompt: prompt,
         stream: false,
       }

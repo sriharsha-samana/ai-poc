@@ -58,7 +58,7 @@ npm init -y
 
 ## 2️⃣ Install Dependencies
 
-npm install express axios body-parser better-sqlite3
+npm install express axios sql.js
 
 ## 3️⃣ Add Files
 
