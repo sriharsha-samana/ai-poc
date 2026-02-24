@@ -98,6 +98,35 @@ Example JSON:
 { "id": "doc1", "text": "The sun is a star at the center of the solar
 system." }
 
+## Ingest an Entire Confluence Space
+
+POST /ingest/confluence-space
+
+Example JSON (Confluence Cloud - email + API token):
+
+{
+	"baseUrl": "https://your-company.atlassian.net",
+	"spaceKey": "ENG",
+	"email": "you@company.com",
+	"apiToken": "your_api_token",
+	"pageSize": 25,
+	"maxPages": 200
+}
+
+Example JSON (Bearer token):
+
+{
+	"baseUrl": "https://confluence.company.com",
+	"spaceKey": "ENG",
+	"bearerToken": "your_bearer_token"
+}
+
+Notes:
+
+-   Page content is extracted from Confluence storage HTML and converted to plain text.
+-   Document IDs are stable per page: `confluence:<spaceKey>:<pageId>`.
+-   Existing entries for the same page are updated on re-ingest.
+
 ------------------------------------------------------------------------
 
 # ❓ Ask Questions
@@ -148,6 +177,28 @@ node server.js
 3️⃣ Open browser
 
 http://localhost:3000
+
+------------------------------------------------------------------------
+
+# ⚙️ Configuration
+
+You can customize runtime behavior using environment variables:
+
+-   `PORT` (default: `3000`)
+-   `DB_FILE_PATH` (default: `./data/rag.db`)
+-   `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+-   `OLLAMA_EMBED_MODEL` (default: `nomic-embed-text`)
+-   `OLLAMA_GEN_MODEL` (default: `phi3:mini`)
+-   `MAX_INGEST_CHARS` (default: `12000`)
+
+Example:
+
+PORT=4000 OLLAMA_GEN_MODEL=phi3:mini node server.js
+
+Tip:
+
+Copy `.env.example` to `.env` and adjust values for your environment.
+The app auto-loads `.env` at startup.
 
 ------------------------------------------------------------------------
 
