@@ -254,6 +254,37 @@
       font-size: 16px;
     }
 
+    .ingest-summary {
+      margin-top: 12px;
+      padding: 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      display: none;
+    }
+
+    .ingest-summary.active {
+      display: block;
+    }
+
+    .ingest-summary h4 {
+      margin: 0 0 10px;
+      color: #334155;
+      font-size: 17px;
+    }
+
+    .ingest-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      font-size: 14px;
+      color: #334155;
+    }
+
+    .ingest-grid strong {
+      color: #0f172a;
+    }
+
     @media (max-width: 640px) {
       .app-shell {
         padding: 16px 14px 18px;
@@ -301,6 +332,7 @@
           <button id="ingestBtn" onclick="ingestFolder()">Ingest Folder</button>
         </div>
         <div id="ingestStatus"></div>
+        <div id="ingestSummary" class="ingest-summary"></div>
       </div>
 
       <div id="askSection" class="tab-content active">
@@ -398,12 +430,53 @@
       return {
         folderPath: document.getElementById("folderPath").value.trim(),
         repoTag: document.getElementById("repoTagInput").value.trim(),
-        extensions: [".js", ".ts", ".jsx", ".tsx", ".vue", ".json", ".md", ".html", ".css", ".scss", ".py", ".java", ".cs"],
         maxFiles: 2000,
         chunkSize: 3000,
         chunkOverlap: 200,
         dryRun: false
       };
+    }
+
+    function renderIngestSummary(data) {
+      const ingestSummary = document.getElementById("ingestSummary");
+
+      if (!data || typeof data !== "object") {
+        ingestSummary.classList.remove("active");
+        ingestSummary.innerHTML = "";
+        return;
+      }
+
+      const skippedReasons = data.skippedReasons || {};
+      const summaryItems = [
+        ["Matched files", data.totalMatched],
+        ["Ingested documents", data.ingestedCount],
+        ["Planned documents", data.plannedIngestCount],
+        ["Chunked files", data.chunkedFileCount],
+        ["Skipped files", data.skippedCount],
+        ["Failed files", data.failedCount],
+        ["Excluded by extension", skippedReasons.excludedByExtension],
+        ["Excluded by .gitignore", (Number(skippedReasons.excludedByGitignoreDir) || 0) + (Number(skippedReasons.excludedByGitignoreFile) || 0)],
+        ["Excluded by defaults", (Number(skippedReasons.excludedByDefaultDir) || 0) + (Number(skippedReasons.excludedByDefaultFile) || 0)],
+        ["Empty/Binary skipped", skippedReasons.contentEmptyOrBinary],
+        ["Max files reached", skippedReasons.maxFilesReached ? "Yes" : "No"],
+      ];
+
+      const rows = summaryItems
+        .filter((item) => item[1] !== undefined && item[1] !== null)
+        .map(([label, value]) => `<div><strong>${label}:</strong> ${value}</div>`)
+        .join("");
+
+      if (!rows) {
+        ingestSummary.classList.remove("active");
+        ingestSummary.innerHTML = "";
+        return;
+      }
+
+      ingestSummary.innerHTML = `
+        <h4>Ingest Summary</h4>
+        <div class="ingest-grid">${rows}</div>
+      `;
+      ingestSummary.classList.add("active");
     }
 
     async function ingestFolder() {
@@ -420,6 +493,7 @@
       ingestBtn.disabled = true;
       ingestStatus.className = "loading";
       ingestStatus.innerText = "Ingest in progress...";
+      renderIngestSummary(null);
       responseDiv.innerText = "";
 
       try {
@@ -431,6 +505,7 @@
 
         const data = await res.json();
         responseDiv.innerText = JSON.stringify(data, null, 2);
+        renderIngestSummary(data);
 
         if (res.ok) {
           ingestStatus.className = "success";
@@ -446,6 +521,7 @@
       } catch (error) {
         ingestStatus.className = "error";
         ingestStatus.innerText = "Ingest failed due to network/server error.";
+        renderIngestSummary(null);
       } finally {
         ingestBtn.disabled = false;
       }

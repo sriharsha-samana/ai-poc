@@ -112,6 +112,17 @@ function shouldExcludeByDefault(fullPath, entryName, isDirectory) {
   return DEFAULT_EXCLUDED_SUFFIXES.some((suffix) => lowerPath.endsWith(suffix));
 }
 
+function createDiscoveryStats() {
+  return {
+    excludedByDefaultDir: 0,
+    excludedByDefaultFile: 0,
+    excludedByGitignoreDir: 0,
+    excludedByGitignoreFile: 0,
+    excludedByExtension: 0,
+    maxFilesReached: false,
+  };
+}
+
 function chunkText(content, chunkSize, chunkOverlap) {
   if (!content || content.length <= chunkSize) {
     return [content];
@@ -179,8 +190,9 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
   const matcher = loadGitignoreMatcher(rootPath);
   const results = [];
   const stack = [rootPath];
+  const discoveryStats = createDiscoveryStats();
 
-  while (stack.length > 0) {
+  outer: while (stack.length > 0) {
     const currentDir = stack.pop();
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
@@ -190,10 +202,12 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
 
       if (entry.isDirectory()) {
         if (shouldExcludeByDefault(fullPath, entry.name, true)) {
+          discoveryStats.excludedByDefaultDir += 1;
           continue;
         }
 
         if (matcher.ignores(`${relPath}/`)) {
+          discoveryStats.excludedByGitignoreDir += 1;
           continue;
         }
 
@@ -206,26 +220,33 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
       }
 
       if (shouldExcludeByDefault(fullPath, entry.name, false)) {
+        discoveryStats.excludedByDefaultFile += 1;
         continue;
       }
 
       if (matcher.ignores(relPath)) {
+        discoveryStats.excludedByGitignoreFile += 1;
         continue;
       }
 
       const ext = path.extname(entry.name).toLowerCase();
       if (!extensionSet.has(ext)) {
+        discoveryStats.excludedByExtension += 1;
         continue;
       }
 
       results.push(fullPath);
       if (results.length >= maxFiles) {
-        return results;
+        discoveryStats.maxFilesReached = true;
+        break outer;
       }
     }
   }
 
-  return results;
+  return {
+    files: results,
+    discoveryStats,
+  };
 }
 
 function registerFolderIngestRoutes(
@@ -271,13 +292,18 @@ function registerFolderIngestRoutes(
         ).map((ext) => (ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`))
       );
 
-      const files = getEligibleFiles(resolvedRoot, extensionSet, safeMaxFiles);
+      const { files, discoveryStats } = getEligibleFiles(
+        resolvedRoot,
+        extensionSet,
+        safeMaxFiles
+      );
 
       let ingestedCount = 0;
       let skippedCount = 0;
       let failedCount = 0;
       let chunkedFileCount = 0;
       let plannedIngestCount = 0;
+      let skippedEmptyOrBinaryCount = 0;
       const failures = [];
       const samplePlannedDocuments = [];
 
@@ -288,6 +314,7 @@ function registerFolderIngestRoutes(
           const content = fs.readFileSync(filePath, "utf8");
           if (!content.trim() || !isLikelyTextFile(content)) {
             skippedCount += 1;
+            skippedEmptyOrBinaryCount += 1;
             continue;
           }
 
@@ -346,7 +373,17 @@ function registerFolderIngestRoutes(
         chunkedFileCount,
         chunkSize: safeChunkSize,
         chunkOverlap: Math.min(safeChunkOverlap, safeChunkSize - 1),
+        appliedExtensions: Array.from(extensionSet),
         skippedCount,
+        skippedReasons: {
+          contentEmptyOrBinary: skippedEmptyOrBinaryCount,
+          excludedByDefaultDir: discoveryStats.excludedByDefaultDir,
+          excludedByDefaultFile: discoveryStats.excludedByDefaultFile,
+          excludedByGitignoreDir: discoveryStats.excludedByGitignoreDir,
+          excludedByGitignoreFile: discoveryStats.excludedByGitignoreFile,
+          excludedByExtension: discoveryStats.excludedByExtension,
+          maxFilesReached: discoveryStats.maxFilesReached,
+        },
         failedCount,
         samplePlannedDocuments,
         failures: failures.slice(0, 25),
