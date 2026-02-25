@@ -454,7 +454,6 @@
         ["Chunked files", data.chunkedFileCount],
         ["Skipped files", data.skippedCount],
         ["Failed files", data.failedCount],
-        ["Excluded by extension", skippedReasons.excludedByExtension],
         ["Excluded by .gitignore", (Number(skippedReasons.excludedByGitignoreDir) || 0) + (Number(skippedReasons.excludedByGitignoreFile) || 0)],
         ["Excluded by defaults", (Number(skippedReasons.excludedByDefaultDir) || 0) + (Number(skippedReasons.excludedByDefaultFile) || 0)],
         ["Empty/Binary skipped", skippedReasons.contentEmptyOrBinary],

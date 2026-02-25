@@ -2,35 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const ignore = require("ignore");
 
-const DEFAULT_EXTENSIONS = [
-  ".js",
-  ".ts",
-  ".jsx",
-  ".tsx",
-  ".py",
-  ".java",
-  ".go",
-  ".rs",
-  ".cpp",
-  ".c",
-  ".h",
-  ".cs",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".md",
-  ".txt",
-  ".html",
-  ".css",
-  ".scss",
-  ".sql",
-  ".sh",
-  ".xml",
-  ".toml",
-  ".ini",
-  ".conf",
-];
-
 const DEFAULT_EXCLUDED_DIRS = new Set([
   ".git",
   "node_modules",
@@ -118,7 +89,6 @@ function createDiscoveryStats() {
     excludedByDefaultFile: 0,
     excludedByGitignoreDir: 0,
     excludedByGitignoreFile: 0,
-    excludedByExtension: 0,
     maxFilesReached: false,
   };
 }
@@ -186,7 +156,7 @@ function formatFailureReason(error) {
   return parts.length > 0 ? parts.join(" | ") : "Unknown ingestion failure";
 }
 
-function getEligibleFiles(rootPath, extensionSet, maxFiles) {
+function getEligibleFiles(rootPath, maxFiles) {
   const matcher = loadGitignoreMatcher(rootPath);
   const results = [];
   const stack = [rootPath];
@@ -229,12 +199,6 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
         continue;
       }
 
-      const ext = path.extname(entry.name).toLowerCase();
-      if (!extensionSet.has(ext)) {
-        discoveryStats.excludedByExtension += 1;
-        continue;
-      }
-
       results.push(fullPath);
       if (results.length >= maxFiles) {
         discoveryStats.maxFilesReached = true;
@@ -259,7 +223,6 @@ function registerFolderIngestRoutes(
 
       const {
         folderPath,
-        extensions = DEFAULT_EXTENSIONS,
         maxFiles = 2000,
         chunkSize = 3000,
         chunkOverlap = 200,
@@ -285,18 +248,7 @@ function registerFolderIngestRoutes(
       if (!safeRepoTag) {
         return res.status(400).json({ error: "repoTag is invalid" });
       }
-      const extensionSet = new Set(
-        (Array.isArray(extensions) && extensions.length > 0
-          ? extensions
-          : DEFAULT_EXTENSIONS
-        ).map((ext) => (ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`))
-      );
-
-      const { files, discoveryStats } = getEligibleFiles(
-        resolvedRoot,
-        extensionSet,
-        safeMaxFiles
-      );
+      const { files, discoveryStats } = getEligibleFiles(resolvedRoot, safeMaxFiles);
 
       let ingestedCount = 0;
       let skippedCount = 0;
@@ -373,7 +325,7 @@ function registerFolderIngestRoutes(
         chunkedFileCount,
         chunkSize: safeChunkSize,
         chunkOverlap: Math.min(safeChunkOverlap, safeChunkSize - 1),
-        appliedExtensions: Array.from(extensionSet),
+        appliedExtensions: "all",
         skippedCount,
         skippedReasons: {
           contentEmptyOrBinary: skippedEmptyOrBinaryCount,
@@ -381,7 +333,6 @@ function registerFolderIngestRoutes(
           excludedByDefaultFile: discoveryStats.excludedByDefaultFile,
           excludedByGitignoreDir: discoveryStats.excludedByGitignoreDir,
           excludedByGitignoreFile: discoveryStats.excludedByGitignoreFile,
-          excludedByExtension: discoveryStats.excludedByExtension,
           maxFilesReached: discoveryStats.maxFilesReached,
         },
         failedCount,

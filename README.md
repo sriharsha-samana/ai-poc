@@ -140,7 +140,6 @@ Example JSON:
 {
 	"folderPath": "/absolute/path/to/your/project",
 	"repoTag": "my-repo",
-	"extensions": [".js", ".ts", ".md", ".json", ".py"],
 	"maxFiles": 2000,
 	"chunkSize": 8000,
 	"chunkOverlap": 500,
@@ -152,6 +151,7 @@ Notes:
 -   The endpoint automatically respects `.gitignore` from the target folder.
 -   Ignored files/folders (for example `node_modules/`, `dist/`, `.env`) are skipped.
 -   It also skips common non-useful files by default (lock files, sourcemaps, minified bundles, logs, build dirs).
+-   No extension allowlist is applied; all file extensions are eligible unless excluded by default rules or `.gitignore`.
 -   Large files are automatically split into chunks to improve retrieval quality.
 -   Chunk document IDs use `file:<relative-path>#chunk-<n>`.
 -   Set `dryRun: true` to preview matched files/chunks without writing embeddings.
