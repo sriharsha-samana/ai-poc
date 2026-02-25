@@ -140,7 +140,6 @@ Example JSON:
 {
 	"folderPath": "/absolute/path/to/your/project",
 	"repoTag": "my-repo",
-	"maxFiles": 2000,
 	"chunkSize": 8000,
 	"chunkOverlap": 500,
 	"dryRun": true

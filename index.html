@@ -430,7 +430,6 @@
       return {
         folderPath: document.getElementById("folderPath").value.trim(),
         repoTag: document.getElementById("repoTagInput").value.trim(),
-        maxFiles: 2000,
         chunkSize: 3000,
         chunkOverlap: 200,
         dryRun: false
@@ -457,7 +456,6 @@
         ["Excluded by .gitignore", (Number(skippedReasons.excludedByGitignoreDir) || 0) + (Number(skippedReasons.excludedByGitignoreFile) || 0)],
         ["Excluded by defaults", (Number(skippedReasons.excludedByDefaultDir) || 0) + (Number(skippedReasons.excludedByDefaultFile) || 0)],
         ["Empty/Binary skipped", skippedReasons.contentEmptyOrBinary],
-        ["Max files reached", skippedReasons.maxFilesReached ? "Yes" : "No"],
       ];
 
       const rows = summaryItems

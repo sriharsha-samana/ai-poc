@@ -89,7 +89,6 @@ function createDiscoveryStats() {
     excludedByDefaultFile: 0,
     excludedByGitignoreDir: 0,
     excludedByGitignoreFile: 0,
-    maxFilesReached: false,
   };
 }
 
@@ -156,13 +155,13 @@ function formatFailureReason(error) {
   return parts.length > 0 ? parts.join(" | ") : "Unknown ingestion failure";
 }
 
-function getEligibleFiles(rootPath, maxFiles) {
+function getEligibleFiles(rootPath) {
   const matcher = loadGitignoreMatcher(rootPath);
   const results = [];
   const stack = [rootPath];
   const discoveryStats = createDiscoveryStats();
 
-  outer: while (stack.length > 0) {
+  while (stack.length > 0) {
     const currentDir = stack.pop();
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
@@ -200,10 +199,6 @@ function getEligibleFiles(rootPath, maxFiles) {
       }
 
       results.push(fullPath);
-      if (results.length >= maxFiles) {
-        discoveryStats.maxFilesReached = true;
-        break outer;
-      }
     }
   }
 
@@ -223,7 +218,6 @@ function registerFolderIngestRoutes(
 
       const {
         folderPath,
-        maxFiles = 2000,
         chunkSize = 3000,
         chunkOverlap = 200,
         dryRun = false,
@@ -239,7 +233,6 @@ function registerFolderIngestRoutes(
         return res.status(400).json({ error: "folderPath must be a valid directory" });
       }
 
-      const safeMaxFiles = Math.max(1, Number(maxFiles) || 2000);
       const safeChunkSize = Math.max(500, Number(chunkSize) || 3000);
       const safeChunkOverlap = Math.max(0, Number(chunkOverlap) || 0);
       const safeDryRun = Boolean(dryRun);
@@ -248,7 +241,7 @@ function registerFolderIngestRoutes(
       if (!safeRepoTag) {
         return res.status(400).json({ error: "repoTag is invalid" });
       }
-      const { files, discoveryStats } = getEligibleFiles(resolvedRoot, safeMaxFiles);
+      const { files, discoveryStats } = getEligibleFiles(resolvedRoot);
 
       let ingestedCount = 0;
       let skippedCount = 0;
@@ -333,7 +326,6 @@ function registerFolderIngestRoutes(
           excludedByDefaultFile: discoveryStats.excludedByDefaultFile,
           excludedByGitignoreDir: discoveryStats.excludedByGitignoreDir,
           excludedByGitignoreFile: discoveryStats.excludedByGitignoreFile,
-          maxFilesReached: discoveryStats.maxFilesReached,
         },
         failedCount,
         samplePlannedDocuments,
