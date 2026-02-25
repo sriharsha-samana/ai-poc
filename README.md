@@ -127,6 +127,29 @@ Notes:
 -   Document IDs are stable per page: `confluence:<spaceKey>:<pageId>`.
 -   Existing entries for the same page are updated on re-ingest.
 
+## Ingest a Local Folder (Code + Text)
+
+POST /ingest/folder
+
+Example JSON:
+
+{
+	"folderPath": "/absolute/path/to/your/project",
+	"extensions": [".js", ".ts", ".md", ".json", ".py"],
+	"maxFiles": 2000,
+	"chunkSize": 8000,
+	"chunkOverlap": 500,
+	"dryRun": true
+}
+
+Notes:
+
+-   The endpoint automatically respects `.gitignore` from the target folder.
+-   Ignored files/folders (for example `node_modules/`, `dist/`, `.env`) are skipped.
+-   Large files are automatically split into chunks to improve retrieval quality.
+-   Chunk document IDs use `file:<relative-path>#chunk-<n>`.
+-   Set `dryRun: true` to preview matched files/chunks without writing embeddings.
+
 ------------------------------------------------------------------------
 
 # ❓ Ask Questions
