@@ -100,6 +100,12 @@
   <select id="repoTagSelect">
     <option value="">All repositories</option>
   </select>
+  <div class="checkbox-row">
+    <label>
+      <input id="skipRagToggle" type="checkbox" />
+      Skip local RAG context and ask model directly
+    </label>
+  </div>
   <textarea id="question" placeholder="Ask something..."></textarea>
   <br>
   <button id="askBtn" onclick="ask()">Ask</button>
@@ -186,6 +192,7 @@
     async function ask() {
       const question = document.getElementById("question").value;
       const selectedRepoTag = document.getElementById("repoTagSelect").value;
+      const skipRag = document.getElementById("skipRagToggle").checked;
       const responseDiv = document.getElementById("response");
       const askBtn = document.getElementById("askBtn");
 
@@ -204,7 +211,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             question,
-            repoTag: selectedRepoTag || undefined
+            repoTag: selectedRepoTag || undefined,
+            skipRag,
           })
         });
 
@@ -218,8 +226,22 @@
       }
     }
 
+    function updateRepoScopeState() {
+      const skipRagToggle = document.getElementById("skipRagToggle");
+      const repoTagSelect = document.getElementById("repoTagSelect");
+      const isDirectMode = skipRagToggle.checked;
+
+      repoTagSelect.disabled = isDirectMode;
+      repoTagSelect.title = isDirectMode
+        ? "Repository scope is ignored when asking the model directly"
+        : "";
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       loadRepoTags();
+      const skipRagToggle = document.getElementById("skipRagToggle");
+      skipRagToggle.addEventListener("change", updateRepoScopeState);
+      updateRepoScopeState();
     });
   </script>
 

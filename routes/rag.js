@@ -28,6 +28,28 @@ Answer:
 `;
 }
 
+function buildDirectPrompt(question) {
+  return `
+Answer the following question.
+
+Question:
+${question}
+
+Answer:
+`;
+}
+
+async function generateDirectAnswer({ question, generationModel, ollamaBaseUrl }) {
+  const prompt = buildDirectPrompt(question);
+  const response = await axios.post(`${ollamaBaseUrl}/api/generate`, {
+    model: generationModel,
+    prompt,
+    stream: false,
+  });
+
+  return response.data.response;
+}
+
 async function generateAnswerWithContextFallback({
   scored,
   question,
@@ -119,10 +141,20 @@ function registerRagRoutes(
   app.post("/ask", async (req, res) => {
     try {
       await dbReady;
-      const { question, repoTag } = req.body;
+      const { question, repoTag, skipRag = false } = req.body;
 
       if (!question) {
         return res.status(400).json({ error: "Missing question" });
+      }
+
+      if (skipRag) {
+        const answer = await generateDirectAnswer({
+          question,
+          generationModel,
+          ollamaBaseUrl,
+        });
+
+        return res.json({ answer });
       }
 
       const queryEmbedding = await generateEmbedding(question);

@@ -171,6 +171,10 @@ Repo-scoped query:
 
 { "question": "How is auth implemented?", "repoTag": "my-repo" }
 
+Direct model query (skip local RAG context completely):
+
+{ "question": "Explain transformers simply", "skipRag": true }
+
 Flow:
 
 1.  Question → Embedded using Ollama\
@@ -179,6 +183,8 @@ Flow:
 4.  Top matches selected\
 5.  Context + Question sent to LLM\
 6.  Final answer returned
+
+If `skipRag: true` is provided, steps 1–5 are skipped and the question is sent directly to the generation model.
 
 ------------------------------------------------------------------------
 
