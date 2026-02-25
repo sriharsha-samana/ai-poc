@@ -163,6 +163,8 @@ Notes:
 
 POST /ask
 
+POST /ask/stream
+
 Example JSON:
 
 { "question": "What is the sun?" }
@@ -171,9 +173,23 @@ Repo-scoped query:
 
 { "question": "How is auth implemented?", "repoTag": "my-repo" }
 
+File-scoped query (restrict retrieval to one file):
+
+{ "question": "Refactor this file to improve readability", "repoTag": "my-repo", "filePath": "routes/rag.js" }
+
 Direct model query (skip local RAG context completely):
 
 { "question": "Explain transformers simply", "skipRag": true }
+
+Streaming query (same payload, returns chunked plain text as tokens are generated):
+
+{ "question": "How does auth work?", "repoTag": "my-repo", "skipRag": false }
+
+Streaming file-scoped query:
+
+{ "question": "Suggest a safe refactor for this file", "repoTag": "my-repo", "filePath": "app/createApp.js", "skipRag": false }
+
+In the UI, streaming can be canceled mid-generation using the `Stop generating` button.
 
 Flow:
 
@@ -185,6 +201,8 @@ Flow:
 6.  Final answer returned
 
 If `skipRag: true` is provided, steps 1–5 are skipped and the question is sent directly to the generation model.
+
+Use `/ask/stream` for interactive token-by-token responses in the UI.
 
 ------------------------------------------------------------------------
 

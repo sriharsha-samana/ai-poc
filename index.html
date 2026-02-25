@@ -209,6 +209,18 @@
       font-weight: 600;
     }
 
+    .secondary-btn {
+      border-color: #94a3b8;
+      background: #ffffff;
+      color: #334155;
+      margin-left: 8px;
+    }
+
+    .secondary-btn:hover:not(:disabled) {
+      background: #f8fafc;
+      transform: translateY(-1px);
+    }
+
     .tab-content {
       display: none;
     }
@@ -219,6 +231,21 @@
 
     .actions-row {
       margin-top: 4px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ask-status {
+      font-size: 14px;
+      color: #475569;
+      font-style: italic;
+      display: none;
+    }
+
+    .ask-status.active {
+      display: inline;
     }
 
     #ingestStatus {
@@ -283,6 +310,10 @@
         <select id="repoTagSelect">
           <option value="">All repositories</option>
         </select>
+        <div class="field">
+          <label for="filePathInput">File path (optional)</label>
+          <input id="filePathInput" type="text" placeholder="e.g. routes/rag.js" />
+        </div>
         <div class="checkbox-row">
           <label>
             <input id="skipRagToggle" type="checkbox" />
@@ -292,6 +323,8 @@
         <textarea id="question" placeholder="Ask something about your code or docs..."></textarea>
         <div class="actions-row">
           <button id="askBtn" onclick="ask()">Ask</button>
+          <button id="stopBtn" class="secondary-btn" onclick="stopAsk()" style="display: none;" type="button">Stop generating</button>
+          <span id="askStatus" class="ask-status">Generating...</span>
         </div>
       </div>
     </section>
@@ -303,6 +336,8 @@
   </div>
 
   <script>
+    let currentAskController = null;
+
     function switchTab(tab) {
       const isIngestTab = tab === "ingest";
       const ingestSection = document.getElementById("ingestSection");
@@ -395,36 +430,102 @@
     async function ask() {
       const question = document.getElementById("question").value;
       const selectedRepoTag = document.getElementById("repoTagSelect").value;
+      const filePath = document.getElementById("filePathInput").value.trim();
       const skipRag = document.getElementById("skipRagToggle").checked;
       const responseDiv = document.getElementById("response");
-      const askBtn = document.getElementById("askBtn");
 
       if (!question) {
         alert("Please enter a question");
         return;
       }
 
-      askBtn.disabled = true;
+      const controller = new AbortController();
+      currentAskController = controller;
+
+      setAskStreamingState(true);
       responseDiv.innerHTML = '<span class="loading">Thinking...</span>';
 
       try {
-        const res = await fetch("/ask", {
+        const res = await fetch("/ask/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             question,
             repoTag: selectedRepoTag || undefined,
+            filePath: filePath || undefined,
             skipRag,
           })
         });
 
-        const data = await res.json();
+        if (!res.ok) {
+          let errorMessage = "Failed to answer question";
 
-        responseDiv.innerText = data.answer || data.error;
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            const fallbackText = await res.text();
+            if (fallbackText) {
+              errorMessage = fallbackText;
+            }
+          }
+
+          responseDiv.innerText = errorMessage;
+          return;
+        }
+
+        if (!res.body) {
+          responseDiv.innerText = "Streaming is not supported in this browser.";
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        responseDiv.innerText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          responseDiv.innerText += chunk;
+        }
+
+        responseDiv.innerText += decoder.decode();
       } catch (error) {
+        if (error.name === "AbortError") {
+          if (!responseDiv.innerText.trim()) {
+            responseDiv.innerText = "Generation stopped.";
+          }
+          return;
+        }
+
         responseDiv.innerText = "Error occurred while processing request.";
       } finally {
-        askBtn.disabled = false;
+        if (currentAskController === controller) {
+          currentAskController = null;
+        }
+        setAskStreamingState(false);
+      }
+    }
+
+    function setAskStreamingState(isStreaming) {
+      const askBtn = document.getElementById("askBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const askStatus = document.getElementById("askStatus");
+
+      askBtn.disabled = isStreaming;
+      stopBtn.style.display = isStreaming ? "inline-block" : "none";
+      stopBtn.disabled = !isStreaming;
+      askStatus.classList.toggle("active", isStreaming);
+    }
+
+    function stopAsk() {
+      if (currentAskController) {
+        currentAskController.abort();
       }
     }
 
