@@ -14,6 +14,14 @@
       height: 80px;
     }
 
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+
     button {
       margin-top: 10px;
       padding: 8px 12px;
@@ -23,6 +31,12 @@
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+
+    select {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
     }
 
     #response {
@@ -37,19 +51,55 @@
       font-style: italic;
       color: #555;
     }
+
+    .success {
+      color: #166534;
+      font-weight: 600;
+    }
+
+    .error {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+
+    .field {
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .checkbox-row {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
 
   <h2>📥 Ingest Document</h2>
-  <br><br>
-  <textarea id="docText" placeholder="Enter document text..."></textarea>
+  <p>Customize the payload and ingest a code repository folder.</p>
+  <div class="field">
+    <label for="folderPath">Folder path</label>
+    <input id="folderPath" type="text" value="/absolute/path/to/your/repo" />
+  </div>
+  <div class="field">
+    <label for="repoTagInput">Repo tag</label>
+    <input id="repoTagInput" type="text" value="my-repo" />
+  </div>
   <br>
-  <button onclick="ingest()">Ingest</button>
+  <button id="ingestBtn" onclick="ingestFolder()">Ingest Folder</button>
+  <div id="ingestStatus"></div>
 
   <hr>
 
   <h2>❓ Ask Question</h2>
+  <label for="repoTagSelect">Repository scope</label>
+  <select id="repoTagSelect">
+    <option value="">All repositories</option>
+  </select>
   <textarea id="question" placeholder="Ask something..."></textarea>
   <br>
   <button id="askBtn" onclick="ask()">Ask</button>
@@ -57,21 +107,85 @@
   <div id="response"></div>
 
   <script>
-    async function ingest() {
-      const text = document.getElementById("docText").value;
+    async function loadRepoTags() {
+      const repoTagSelect = document.getElementById("repoTagSelect");
 
-      const res = await fetch("/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
-      });
+      try {
+        const res = await fetch("/repo-tags");
+        const data = await res.json();
+        const repoTags = Array.isArray(data.repoTags) ? data.repoTags : [];
 
-      const data = await res.json();
-      alert(data.message || data.error);
+        repoTagSelect.innerHTML = '<option value="">All repositories</option>';
+        for (const tag of repoTags) {
+          const option = document.createElement("option");
+          option.value = tag;
+          option.textContent = tag;
+          repoTagSelect.appendChild(option);
+        }
+      } catch (error) {
+        repoTagSelect.innerHTML = '<option value="">All repositories</option>';
+      }
+    }
+
+    function buildIngestPayloadFromFields() {
+      return {
+        folderPath: document.getElementById("folderPath").value.trim(),
+        repoTag: document.getElementById("repoTagInput").value.trim(),
+        extensions: [".js", ".ts", ".jsx", ".tsx", ".vue", ".json", ".md", ".html", ".css", ".scss", ".py", ".java", ".cs"],
+        maxFiles: 2000,
+        chunkSize: 3000,
+        chunkOverlap: 200,
+        dryRun: false
+      };
+    }
+
+    async function ingestFolder() {
+      const responseDiv = document.getElementById("response");
+      const ingestStatus = document.getElementById("ingestStatus");
+      const ingestBtn = document.getElementById("ingestBtn");
+      const payload = buildIngestPayloadFromFields();
+
+      if (!payload.folderPath) {
+        alert("Folder path is required");
+        return;
+      }
+
+      ingestBtn.disabled = true;
+      ingestStatus.className = "loading";
+      ingestStatus.innerText = "Ingest in progress...";
+      responseDiv.innerText = "";
+
+      try {
+        const res = await fetch("/ingest/folder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        responseDiv.innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          ingestStatus.className = "success";
+          ingestStatus.innerText = "Ingest completed successfully.";
+          if (!payload.dryRun) {
+            await loadRepoTags();
+          }
+        } else {
+          ingestStatus.className = "error";
+          ingestStatus.innerText = data.error || "Ingest failed.";
+        }
+      } catch (error) {
+        ingestStatus.className = "error";
+        ingestStatus.innerText = "Ingest failed due to network/server error.";
+      } finally {
+        ingestBtn.disabled = false;
+      }
     }
 
     async function ask() {
       const question = document.getElementById("question").value;
+      const selectedRepoTag = document.getElementById("repoTagSelect").value;
       const responseDiv = document.getElementById("response");
       const askBtn = document.getElementById("askBtn");
 
@@ -88,7 +202,10 @@
         const res = await fetch("/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question })
+          body: JSON.stringify({
+            question,
+            repoTag: selectedRepoTag || undefined
+          })
         });
 
         const data = await res.json();
@@ -100,6 +217,10 @@
         askBtn.disabled = false;
       }
     }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadRepoTags();
+    });
   </script>
 
 </body>

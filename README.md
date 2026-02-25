@@ -98,6 +98,10 @@ Example JSON:
 { "id": "doc1", "text": "The sun is a star at the center of the solar
 system." }
 
+Optional repo-scoped ingest:
+
+{ "text": "...", "repoTag": "my-repo" }
+
 ## Ingest an Entire Confluence Space
 
 POST /ingest/confluence-space
@@ -135,6 +139,7 @@ Example JSON:
 
 {
 	"folderPath": "/absolute/path/to/your/project",
+	"repoTag": "my-repo",
 	"extensions": [".js", ".ts", ".md", ".json", ".py"],
 	"maxFiles": 2000,
 	"chunkSize": 8000,
@@ -146,9 +151,11 @@ Notes:
 
 -   The endpoint automatically respects `.gitignore` from the target folder.
 -   Ignored files/folders (for example `node_modules/`, `dist/`, `.env`) are skipped.
+-   It also skips common non-useful files by default (lock files, sourcemaps, minified bundles, logs, build dirs).
 -   Large files are automatically split into chunks to improve retrieval quality.
 -   Chunk document IDs use `file:<relative-path>#chunk-<n>`.
 -   Set `dryRun: true` to preview matched files/chunks without writing embeddings.
+-   Use `repoTag` to isolate one repository from another in later `/ask` calls.
 
 ------------------------------------------------------------------------
 
@@ -159,6 +166,10 @@ POST /ask
 Example JSON:
 
 { "question": "What is the sun?" }
+
+Repo-scoped query:
+
+{ "question": "How is auth implemented?", "repoTag": "my-repo" }
 
 Flow:
 

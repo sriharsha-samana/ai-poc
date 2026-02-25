@@ -29,11 +29,52 @@ const DEFAULT_EXTENSIONS = [
   ".toml",
   ".ini",
   ".conf",
-  ".env",
+];
+
+const DEFAULT_EXCLUDED_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".next",
+  ".nuxt",
+  "target",
+  "bin",
+  "obj",
+]);
+
+const DEFAULT_EXCLUDED_FILE_NAMES = new Set([
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lockb",
+  "composer.lock",
+  "poetry.lock",
+  "cargo.lock",
+  "pipfile.lock",
+]);
+
+const DEFAULT_EXCLUDED_SUFFIXES = [
+  ".min.js",
+  ".min.css",
+  ".map",
+  ".log",
+  ".tmp",
+  ".lock",
 ];
 
 function normalizeRelPath(targetPath, rootPath) {
   return path.relative(rootPath, targetPath).split(path.sep).join("/");
+}
+
+function normalizeRepoTag(tag) {
+  return String(tag || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function loadGitignoreMatcher(rootPath) {
@@ -50,6 +91,25 @@ function loadGitignoreMatcher(rootPath) {
 
 function isLikelyTextFile(content) {
   return !content.includes("\u0000");
+}
+
+function shouldExcludeByDefault(fullPath, entryName, isDirectory) {
+  const lowerName = entryName.toLowerCase();
+
+  if (isDirectory) {
+    return DEFAULT_EXCLUDED_DIRS.has(lowerName);
+  }
+
+  if (DEFAULT_EXCLUDED_FILE_NAMES.has(lowerName)) {
+    return true;
+  }
+
+  if (lowerName.startsWith(".env")) {
+    return true;
+  }
+
+  const lowerPath = fullPath.toLowerCase();
+  return DEFAULT_EXCLUDED_SUFFIXES.some((suffix) => lowerPath.endsWith(suffix));
 }
 
 function chunkText(content, chunkSize, chunkOverlap) {
@@ -77,6 +137,44 @@ function chunkText(content, chunkSize, chunkOverlap) {
   return chunks;
 }
 
+function stringifySafe(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+}
+
+function formatFailureReason(error) {
+  const status = error?.response?.status;
+  const statusText = error?.response?.statusText;
+  const responseData = stringifySafe(error?.response?.data);
+  const parts = [];
+
+  if (status) {
+    parts.push(`HTTP ${status}${statusText ? ` ${statusText}` : ""}`);
+  }
+
+  if (responseData) {
+    const compact = responseData.length > 1000 ? `${responseData.slice(0, 1000)}...` : responseData;
+    parts.push(`response: ${compact}`);
+  }
+
+  if (error?.message) {
+    parts.push(`message: ${error.message}`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : "Unknown ingestion failure";
+}
+
 function getEligibleFiles(rootPath, extensionSet, maxFiles) {
   const matcher = loadGitignoreMatcher(rootPath);
   const results = [];
@@ -91,6 +189,10 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
       const relPath = normalizeRelPath(fullPath, rootPath);
 
       if (entry.isDirectory()) {
+        if (shouldExcludeByDefault(fullPath, entry.name, true)) {
+          continue;
+        }
+
         if (matcher.ignores(`${relPath}/`)) {
           continue;
         }
@@ -100,6 +202,10 @@ function getEligibleFiles(rootPath, extensionSet, maxFiles) {
       }
 
       if (!entry.isFile()) {
+        continue;
+      }
+
+      if (shouldExcludeByDefault(fullPath, entry.name, false)) {
         continue;
       }
 
@@ -134,9 +240,10 @@ function registerFolderIngestRoutes(
         folderPath,
         extensions = DEFAULT_EXTENSIONS,
         maxFiles = 2000,
-        chunkSize = 8000,
-        chunkOverlap = 500,
+        chunkSize = 3000,
+        chunkOverlap = 200,
         dryRun = false,
+        repoTag,
       } = req.body;
 
       if (!folderPath) {
@@ -149,9 +256,14 @@ function registerFolderIngestRoutes(
       }
 
       const safeMaxFiles = Math.max(1, Number(maxFiles) || 2000);
-      const safeChunkSize = Math.max(500, Number(chunkSize) || 8000);
+      const safeChunkSize = Math.max(500, Number(chunkSize) || 3000);
       const safeChunkOverlap = Math.max(0, Number(chunkOverlap) || 0);
       const safeDryRun = Boolean(dryRun);
+      const safeRepoTag = normalizeRepoTag(repoTag || path.basename(resolvedRoot));
+
+      if (!safeRepoTag) {
+        return res.status(400).json({ error: "repoTag is invalid" });
+      }
       const extensionSet = new Set(
         (Array.isArray(extensions) && extensions.length > 0
           ? extensions
@@ -188,11 +300,11 @@ function registerFolderIngestRoutes(
             const chunk = chunks[index];
             const isChunked = chunks.length > 1;
             const documentId = isChunked
-              ? `file:${relPath}#chunk-${index + 1}`
-              : `file:${relPath}`;
+              ? `file:${safeRepoTag}:${relPath}#chunk-${index + 1}`
+              : `file:${safeRepoTag}:${relPath}`;
             const header = isChunked
-              ? `File: ${relPath} (chunk ${index + 1}/${chunks.length})`
-              : `File: ${relPath}`;
+              ? `Repository: ${safeRepoTag}\nFile: ${relPath} (chunk ${index + 1}/${chunks.length})`
+              : `Repository: ${safeRepoTag}\nFile: ${relPath}`;
             const text = `${header}\n\n${chunk}`;
 
             if (safeDryRun) {
@@ -205,13 +317,15 @@ function registerFolderIngestRoutes(
                 });
               }
             } else {
-              await saveDocumentWithEmbedding(documentId, text);
+              await saveDocumentWithEmbedding(documentId, text, {
+                repoTag: safeRepoTag,
+              });
               ingestedCount += 1;
             }
           }
         } catch (fileError) {
           failedCount += 1;
-          failures.push({ path: relPath, reason: fileError.message });
+          failures.push({ path: relPath, reason: formatFailureReason(fileError) });
         }
       }
 
@@ -224,6 +338,7 @@ function registerFolderIngestRoutes(
           ? "Folder dry run completed"
           : "Folder ingestion completed",
         dryRun: safeDryRun,
+        repoTag: safeRepoTag,
         folderPath: resolvedRoot,
         totalMatched: files.length,
         ingestedCount,
