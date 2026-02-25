@@ -23,7 +23,7 @@ function normalizeConfluenceBaseUrl(baseUrl) {
 
 function getConfluenceApiCandidates(baseUrl) {
   const normalized = normalizeConfluenceBaseUrl(baseUrl);
-  const candidates = [`${normalized}/wiki/rest/api`, `${normalized}/rest/api`];
+  const candidates = [`${normalized}/rest/api`];
   return [...new Set(candidates)];
 }
 
