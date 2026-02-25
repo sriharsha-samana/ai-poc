@@ -312,7 +312,8 @@
         </select>
         <div class="field">
           <label for="filePathInput">File path (optional)</label>
-          <input id="filePathInput" type="text" placeholder="e.g. routes/rag.js" />
+          <input id="filePathInput" type="text" list="filePathOptions" placeholder="e.g. routes/rag.js" />
+          <datalist id="filePathOptions"></datalist>
         </div>
         <div class="checkbox-row">
           <label>
@@ -371,6 +372,28 @@
       }
     }
 
+    async function loadIngestedFilePaths() {
+      const repoTagSelect = document.getElementById("repoTagSelect");
+      const filePathOptions = document.getElementById("filePathOptions");
+      const selectedRepoTag = repoTagSelect.value;
+      const query = selectedRepoTag ? `?repoTag=${encodeURIComponent(selectedRepoTag)}` : "";
+
+      try {
+        const res = await fetch(`/ingested-files${query}`);
+        const data = await res.json();
+        const files = Array.isArray(data.files) ? data.files : [];
+
+        filePathOptions.innerHTML = "";
+        for (const filePath of files) {
+          const option = document.createElement("option");
+          option.value = filePath;
+          filePathOptions.appendChild(option);
+        }
+      } catch (error) {
+        filePathOptions.innerHTML = "";
+      }
+    }
+
     function buildIngestPayloadFromFields() {
       return {
         folderPath: document.getElementById("folderPath").value.trim(),
@@ -414,6 +437,7 @@
           ingestStatus.innerText = "Ingest completed successfully.";
           if (!payload.dryRun) {
             await loadRepoTags();
+            await loadIngestedFilePaths();
           }
         } else {
           ingestStatus.className = "error";
@@ -532,16 +556,26 @@
     function updateRepoScopeState() {
       const skipRagToggle = document.getElementById("skipRagToggle");
       const repoTagSelect = document.getElementById("repoTagSelect");
+      const filePathInput = document.getElementById("filePathInput");
       const isDirectMode = skipRagToggle.checked;
 
       repoTagSelect.disabled = isDirectMode;
+      filePathInput.disabled = isDirectMode;
       repoTagSelect.title = isDirectMode
         ? "Repository scope is ignored when asking the model directly"
         : "";
+      filePathInput.title = isDirectMode
+        ? "File path is ignored when asking the model directly"
+        : "";
     }
 
-    window.addEventListener("DOMContentLoaded", () => {
-      loadRepoTags();
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadRepoTags();
+      await loadIngestedFilePaths();
+
+      const repoTagSelect = document.getElementById("repoTagSelect");
+      repoTagSelect.addEventListener("change", loadIngestedFilePaths);
+
       const skipRagToggle = document.getElementById("skipRagToggle");
       skipRagToggle.addEventListener("change", updateRepoScopeState);
       updateRepoScopeState();

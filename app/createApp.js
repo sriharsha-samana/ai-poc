@@ -17,6 +17,7 @@ function createApp() {
     persistDatabase,
     getDocuments,
     getRepoTags,
+    getIngestedFilePaths,
     generateEmbedding,
     saveDocumentWithEmbedding,
   } = createDbService({
@@ -34,6 +35,7 @@ function createApp() {
     saveDocumentWithEmbedding,
     getDocuments,
     getRepoTags,
+    getIngestedFilePaths,
     generateEmbedding,
     generationModel: config.models.generation,
     ollamaBaseUrl: config.ollamaBaseUrl,

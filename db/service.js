@@ -11,6 +11,23 @@ function createDbService({
 }) {
   let db;
 
+  function extractFilePathFromDocumentId(id) {
+    const value = String(id || "");
+    if (!value.startsWith("file:")) {
+      return "";
+    }
+
+    const withoutPrefix = value.slice("file:".length);
+    const firstColonIndex = withoutPrefix.indexOf(":");
+    if (firstColonIndex < 0) {
+      return "";
+    }
+
+    const withChunk = withoutPrefix.slice(firstColonIndex + 1);
+    const hashIndex = withChunk.indexOf("#");
+    return hashIndex >= 0 ? withChunk.slice(0, hashIndex) : withChunk;
+  }
+
   function isContextLengthError(error) {
     const responseError = error?.response?.data?.error;
     const message = typeof responseError === "string" ? responseError : error?.message;
@@ -99,6 +116,32 @@ function createDbService({
     return result[0].values.map((row) => row[0]);
   }
 
+  function getIngestedFilePaths(options = {}) {
+    const { repoTag } = options;
+    const hasScope = typeof repoTag === "string" && repoTag.trim().length > 0;
+
+    const query = hasScope
+      ? "SELECT id FROM documents WHERE id LIKE 'file:%' AND repo_tag = ?"
+      : "SELECT id FROM documents WHERE id LIKE 'file:%'";
+    const result = hasScope ? db.exec(query, [repoTag.trim()]) : db.exec(query);
+
+    if (result.length === 0) {
+      return [];
+    }
+
+    const idIndex = result[0].columns.indexOf("id");
+    const uniquePaths = new Set();
+
+    for (const row of result[0].values) {
+      const filePath = extractFilePathFromDocumentId(row[idIndex]);
+      if (filePath) {
+        uniquePaths.add(filePath);
+      }
+    }
+
+    return Array.from(uniquePaths).sort((a, b) => a.localeCompare(b));
+  }
+
   function trimForEmbedding(text) {
     if (!text || text.length <= maxIngestChars) {
       return text;
@@ -157,6 +200,7 @@ function createDbService({
     persistDatabase,
     getDocuments,
     getRepoTags,
+    getIngestedFilePaths,
     generateEmbedding,
     saveDocumentWithEmbedding,
   };

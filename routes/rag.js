@@ -302,6 +302,7 @@ function registerRagRoutes(
     saveDocumentWithEmbedding,
     getDocuments,
     getRepoTags,
+    getIngestedFilePaths,
     generateEmbedding,
     generationModel,
     ollamaBaseUrl = "http://localhost:11434",
@@ -315,6 +316,18 @@ function registerRagRoutes(
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to list repo tags" });
+    }
+  });
+
+  app.get("/ingested-files", async (req, res) => {
+    try {
+      await dbReady;
+      const repoTag = typeof req.query.repoTag === "string" ? req.query.repoTag : undefined;
+      const files = getIngestedFilePaths({ repoTag });
+      res.json({ files });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to list ingested files" });
     }
   });
 

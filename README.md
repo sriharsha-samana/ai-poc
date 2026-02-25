@@ -157,6 +157,16 @@ Notes:
 -   Set `dryRun: true` to preview matched files/chunks without writing embeddings.
 -   Use `repoTag` to isolate one repository from another in later `/ask` calls.
 
+## List Ingested Files
+
+GET /ingested-files
+
+Optional repo scope:
+
+GET /ingested-files?repoTag=my-repo
+
+Returns unique ingested file paths (chunk IDs collapsed to file-level paths).
+
 ------------------------------------------------------------------------
 
 # ❓ Ask Questions
@@ -176,6 +186,8 @@ Repo-scoped query:
 File-scoped query (restrict retrieval to one file):
 
 { "question": "Refactor this file to improve readability", "repoTag": "my-repo", "filePath": "routes/rag.js" }
+
+Tip: In the UI, `File path` supports autocomplete from ingested files and updates when you change repository scope.
 
 Direct model query (skip local RAG context completely):
 
