@@ -212,11 +212,15 @@ ollama serve
 
 2️⃣ Start Node
 
-node server.js
+npm run dev
 
 3️⃣ Open browser
 
 http://localhost:3000
+
+For production-style run (no hot reload), use:
+
+npm start
 
 ------------------------------------------------------------------------
 
